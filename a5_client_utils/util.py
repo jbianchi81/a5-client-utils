@@ -80,3 +80,54 @@ def roundDate(date : datetime,timeInterval : timedelta,timeOffset : timedelta=No
         return date_0
     else:
         return date_0 - timeInterval
+
+def interval2timedelta(interval : Union[dict,float,timedelta]):
+    """Parses duration dict or number of days into datetime.timedelta object
+    
+    Parameters:
+    -----------
+    interval : dict or float (decimal number of days) or datetime.timedelta
+        If dict, allowed keys are:
+        - days
+        - seconds
+        - microseconds
+        - minutes
+        - hours
+        - weeks
+    
+    Returns:
+    --------
+    duration : datetime.timedelta
+
+    Examples:
+
+    ```
+    interval2timedelta({"hours":1, "minutes": 30})
+    interval2timedelta(1.5/24)
+    ```
+    """
+    if isinstance(interval,timedelta):
+        return interval
+    if isinstance(interval,(float,int)):
+        return timedelta(days=interval)
+    days = 0
+    seconds = 0
+    microseconds = 0
+    milliseconds = 0
+    minutes = 0
+    hours = 0
+    weeks = 0
+    for k in interval:
+        if k == "milliseconds" or k == "millisecond":
+            milliseconds = interval[k]
+        elif k == "seconds" or k == "second":
+            seconds = interval[k]
+        elif k == "minutes" or k == "minute":
+            minutes = interval[k]
+        elif k == "hours" or k == "hour":
+            hours = interval[k]
+        elif k == "days" or k == "day":
+            days = interval[k]
+        elif k == "weeks" or k == "week":
+            weeks = interval[k] * 86400 * 7
+    return timedelta(days=days, seconds=seconds, microseconds=microseconds, milliseconds=milliseconds, minutes=minutes, hours=hours, weeks=weeks)

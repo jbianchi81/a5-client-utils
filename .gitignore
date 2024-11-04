@@ -1,3 +1,7 @@
 a5_client_utils.egg-info
 build
 dist
+a5_client_utils/descriptors/__pycache__
+a5_client_utils/types/__pycache__
+a5_client_utils/__init__.pyc
+a5_client_utils/__pycache__
