@@ -1,5 +1,5 @@
-from typing import TypedDict, List, Optional, Literal, Union
-from .tvp import TVP
+from typing import TypedDict, List, Optional, Literal, Union, NotRequired
+from .tvp_prono import TVPProno
 from datetime import datetime
 
 class SeriesPronoDict(TypedDict):
@@ -13,11 +13,19 @@ class SeriesPronoDict(TypedDict):
     pronosticos: List[TVP]
     """
     series_id : int
-    series_table : str
-    pronosticos: List[TVP]
-    cal_id : Optional[int]
-    tipo : Optional[Literal["puntual","areal","raster"]]
+    series_table : Literal["series","series_areal","series_rast"]
+    pronosticos: List[TVPProno]
+    cal_id : NotRequired[Optional[int]]
+    tipo : NotRequired[Optional[Literal["puntual","areal","raster"]]]
     qualifier : Optional[str]
-    forecast_timestart : Optional[datetime]
-    forecast_timeend : Optional[datetime]
-    forecast_date : Optional[datetime]
+    qualifiers : Optional[List[str]]
+    forecast_timestart : NotRequired[Optional[datetime]]
+    forecast_timeend : NotRequired[Optional[datetime]]
+    forecast_date : NotRequired[Optional[datetime]]
+    cor_id : NotRequired[Optional[int]]
+    var_id : NotRequired[Optional[int]]
+    begin_date : NotRequired[Optional[datetime]]
+    end_date : NotRequired[Optional[datetime]]
+    qualifiers : NotRequired[Optional[List[str]]]
+    count : NotRequired[Optional[int]]
+    estacion_id : NotRequired[Optional[int]]

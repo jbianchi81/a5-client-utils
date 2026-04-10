@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date as datetime_date
-from typing import Union, Optional
+from typing import Union, Optional, TypedDict
 from dateutil.parser import isoparse
 from dateutil.relativedelta import relativedelta
 from dateutil import tz
@@ -7,8 +7,24 @@ import pytz
 import logging
 from pandas import DatetimeIndex, date_range, DateOffset
 
+class IntervalDict(TypedDict):
+    day: int
+    second : int
+    microsecond : int
+    minute : int
+    hour : int
+    month: int
+    days: int
+    seconds : int
+    microseconds : int
+    minutes : int
+    hours : int
+    weeks : int
+    months: int
+
+
 def tryParseAndLocalizeDate(
-        date_string : Union[str,float,datetime,tuple,datetime_date],
+        date_ : Union[str,float,datetime,tuple,datetime_date,IntervalDict],
         timezone : str='America/Argentina/Buenos_Aires'
     ) -> Union[datetime, None]:
     """
@@ -35,18 +51,22 @@ def tryParseAndLocalizeDate(
     tryParseAndLocalizeDate({"days":1, "hours": 12}, timezone = "Africa/Casablanca")
     ```
     """
-    
-    date = isoparse(date_string) if isinstance(date_string,str) else date_string
-    if isinstance(date,dict):
-        date = datetime.now() + relativedelta(**date)
-    elif isinstance(date,(int,float)):
-        date = datetime.now() + relativedelta(days=int(date))
-    elif isinstance(date, tuple):
-        if len(date) < 3:
+    date : datetime
+    if isinstance(date_,str):
+        date = isoparse(date_)
+    elif isinstance(date_,dict):
+        date = datetime.now() + relativedelta(**date_)
+    elif isinstance(date_,(int,float)):
+        date = datetime.now() + relativedelta(days=int(date_))
+    elif isinstance(date_, tuple):
+        if len(date_) < 3:
             raise ValueError("Invalid date tuple: missing items (3 required)")
-        date = datetime(*date)
-    elif isinstance(date, datetime_date):
-        date = datetime(date.year, date.month, date.day)
+        date = datetime(*date_)
+    elif isinstance(date_, datetime_date):
+        date = datetime(date_.year, date_.month, date_.day)
+    else:
+        date = date_
+    
     if date.tzinfo is None or date.tzinfo.utcoffset(date) is None:
         try:
             date = pytz.timezone(timezone).localize(date)
