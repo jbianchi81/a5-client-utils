@@ -4,5 +4,6 @@ from .series_dict import SeriesDict
 from .series_prono_dict import SeriesPronoDict
 from .tvp import TVP
 from .typed_list import TypedList
+from .series_prono_grouped_by_qualifier_dict import SeriesPronoGroupedByQualifierDict
 
-__all__ = ['ApiConfigDict','CorridaDict','SeriesDict','TVP','SeriesPronoDict','TypedList']
+__all__ = ['ApiConfigDict','CorridaDict','SeriesDict','TVP','SeriesPronoDict','TypedList','SeriesPronoGroupedByQualifierDict']

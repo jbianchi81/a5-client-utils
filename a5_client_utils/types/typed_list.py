@@ -1,8 +1,9 @@
 import collections
+from typing import Optional
 
 class TypedList(collections.abc.MutableSequence):
 
-    def __init__(self, oktype, *args, unique_id_property : str = None, **fixed_kwargs):
+    def __init__(self, oktype, *args, unique_id_property : Optional[str] = None, **fixed_kwargs):
         self.oktype = oktype
         self.list = list()
         self._unique_id_property = unique_id_property

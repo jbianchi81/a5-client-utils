@@ -1,14 +1,16 @@
-from datetime import datetime, timedelta
-from typing import Union
-import dateutil
+from datetime import datetime, timedelta, date as datetime_date
+from typing import Union, Optional
+from dateutil.parser import isoparse
+from dateutil.relativedelta import relativedelta
+from dateutil import tz
 import pytz
 import logging
 from pandas import DatetimeIndex, date_range, DateOffset
 
 def tryParseAndLocalizeDate(
-        date_string : Union[str,float,datetime],
+        date_string : Union[str,float,datetime,tuple,datetime_date],
         timezone : str='America/Argentina/Buenos_Aires'
-    ) -> datetime:
+    ) -> Union[datetime, None]:
     """
     Datetime parser. If duration is provided, computes date relative to now.
 
@@ -34,14 +36,17 @@ def tryParseAndLocalizeDate(
     ```
     """
     
-    date = dateutil.parser.isoparse(date_string) if isinstance(date_string,str) else date_string
-    is_from_interval = False
+    date = isoparse(date_string) if isinstance(date_string,str) else date_string
     if isinstance(date,dict):
-        date = datetime.now() + dateutil.relativedelta.relativedelta(**date)
-        is_from_interval = True
+        date = datetime.now() + relativedelta(**date)
     elif isinstance(date,(int,float)):
-        date = datetime.now() + dateutil.relativedelta.relativedelta(days=date)
-        is_from_interval = True
+        date = datetime.now() + relativedelta(days=int(date))
+    elif isinstance(date, tuple):
+        if len(date) < 3:
+            raise ValueError("Invalid date tuple: missing items (3 required)")
+        date = datetime(*date)
+    elif isinstance(date, datetime_date):
+        date = datetime(date.year, date.month, date.day)
     if date.tzinfo is None or date.tzinfo.utcoffset(date) is None:
         try:
             date = pytz.timezone(timezone).localize(date)
@@ -50,33 +55,86 @@ def tryParseAndLocalizeDate(
             return None
     else:
         date = date.astimezone(pytz.timezone(timezone))
-    return date # , is_from_interval
+    return date
 
 def createDatetimeSequence(
-    datetime_index : DatetimeIndex=None, 
-    timeInterval  = timedelta(days=1), 
-    timestart = None, 
-    timeend = None, 
-    timeOffset = None
+    datetime_index : Optional[DatetimeIndex]=None, 
+    timeInterval : Union[relativedelta,dict,int,timedelta] = relativedelta(days=1), 
+    timestart : Union[datetime,tuple,str,None] = None, 
+    timeend : Union[datetime,tuple,str,None] = None, 
+    timeOffset : Union[relativedelta,dict,None] = None
     ) -> DatetimeIndex:
     #Fechas desde timestart a timeend con un paso de timeInterval
     #data: dataframe con index tipo datetime64[ns, America/Argentina/Buenos_Aires]
     #timeOffset sólo para timeInterval n days
-    if datetime_index is None and (timestart is None or timeend is None):
-        raise Exception("Missing datetime_index or timestart+timeend")
-    timestart = timestart if timestart is not None else datetime_index.min()
+    if timestart is None:
+        if datetime_index is None:
+            raise Exception("Missing datetime_index or timestart+timeend")
+        timestart = datetime_index.min()
+    else:
+        timestart = tryParseAndLocalizeDate(timestart)
+    if timestart is None:
+        raise pytz.exceptions.NonExistentTimeError("Nonexistent timestart")
+    if timeend is None:
+        if datetime_index is None:
+            raise Exception("Missing datetime_index or timestart+timeend")
+        timeend = datetime_index.max()
+    else:
+        timeend = tryParseAndLocalizeDate(timeend)
+    if timeend is None:
+        raise pytz.exceptions.NonExistentTimeError("Nonexistent timeend")
+    timeInterval = relativedelta(**timeInterval) if isinstance(timeInterval,dict) else timedelta_to_relativedelta(timeInterval) if isinstance(timeInterval,timedelta) else relativedelta(days=timeInterval) if isinstance(timeInterval, int) else timeInterval
+    timeOffset = relativedelta(**timeOffset) if isinstance(timeOffset,dict) else timeOffset
     timestart = roundDate(timestart,timeInterval,timeOffset,"up")
-    timeend = timeend if timeend  is not None else datetime_index.max()
     timeend = roundDate(timeend,timeInterval,timeOffset,"down")
-    return date_range(start=timestart, end=timeend, freq=DateOffset(days=timeInterval.days, hours=timeInterval.seconds // 3600, minutes = (timeInterval.seconds // 60) % 60))
+    timezone = pytz.timezone("America/Argentina/Buenos_Aires")
+    is_subdaily = timeInterval.hours > 0 or timeInterval.minutes > 0 or timeInterval.seconds > 0 or timeInterval.microseconds > 0
+    if not is_subdaily:
+        if timestart.day == 1 and timeInterval.months > 0:
+            freq = "%iMS" % timeInterval.months
+        elif timestart.day == 1 and timestart.month == 1 and timeInterval.years > 0:
+            freq = "%iYS" % timeInterval.years 
+        elif timeInterval.days > 0:
+            freq = "%iD" % timeInterval.days
+        else:
+            freq = relativedelta_to_freq(timeInterval)
+        dts_utc = date_range(
+            start=timestart.astimezone(tz.UTC), 
+            end=timeend.astimezone(tz.UTC), 
+            freq = freq
+        )
+        if timeOffset is not None:
+            return DatetimeIndex([timezone.localize(datetime(dt.year,dt.month,dt.day,timeOffset.hours,timeOffset.minutes,timeOffset.seconds)) for dt in dts_utc])
+        else:
+            return DatetimeIndex([timezone.localize(datetime(dt.year,dt.month,dt.day)) for dt in dts_utc])
+    else:
+        freq = DateOffset(
+                years=timeInterval.years,
+                months=timeInterval.months,
+                weeks=timeInterval.weeks,
+                days=timeInterval.days, 
+                hours=timeInterval.hours, 
+                minutes = timeInterval.minutes,
+                seconds = timeInterval.seconds,
+                microseconds = timeInterval.microseconds
+            )
+        return date_range(
+            start=timestart, 
+            end=timeend, 
+            freq=freq
+        ) # .tz_convert(timestart.tzinfo)
 
-def roundDate(date : datetime,timeInterval : timedelta,timeOffset : timedelta=None, to="up") -> datetime:
+def roundDate(date : datetime,timeInterval : relativedelta,timeOffset : Optional[relativedelta]=None, to="up") -> datetime:
     date_0 = tryParseAndLocalizeDate(datetime.combine(date.date(),datetime.min.time()))
+    if date_0 is None:
+        raise pytz.exceptions.NonExistentTimeError("Nonexistent time")
     if timeOffset is not None:
         date_0 = date_0 + timeOffset 
     while date_0 < date:
         date_0 = date_0 + timeInterval
-    if to == "up":
+    if date_0 == date:
+        return date_0
+    elif to == "up":
         return date_0
     else:
         return date_0 - timeInterval
@@ -131,3 +189,55 @@ def interval2timedelta(interval : Union[dict,float,timedelta]):
         elif k == "weeks" or k == "week":
             weeks = interval[k] * 86400 * 7
     return timedelta(days=days, seconds=seconds, microseconds=microseconds, milliseconds=milliseconds, minutes=minutes, hours=hours, weeks=weeks)
+
+def timedelta_to_relativedelta(td: timedelta) -> relativedelta:
+    total_seconds = td.total_seconds()
+    
+    days, remainder = divmod(total_seconds, 86400)  # seconds in a day
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    return relativedelta(
+        days=int(days),
+        hours=int(hours),
+        minutes=int(minutes),
+        seconds=int(seconds)
+    )
+
+def relativedelta_to_timedelta(rd: relativedelta) -> timedelta:
+    if not isinstance(rd, relativedelta):
+        raise TypeError("Value must be of type relativedelta")
+    total_seconds = relativedeltaToSeconds(rd)
+    days, remainder = divmod(total_seconds, 86400)  # seconds in a day
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    return timedelta(
+        days=int(days),
+        hours=int(hours),
+        minutes=int(minutes),
+        seconds=int(seconds)
+    )
+
+def relativedeltaToSeconds(rd : relativedelta) -> int:
+    if not isinstance(rd, relativedelta):
+        raise TypeError("Value must be of type relativedelta")
+    now = datetime.now()
+    future = now + rd
+    delta = future - now
+    return int(delta.total_seconds())
+
+def relativedelta_to_freq(rd: relativedelta) -> str:
+    if rd.years:
+        return f"{rd.years}Y"
+    if rd.months:
+        return f"{rd.months}M"
+    if rd.days:
+        return f"{rd.days}D"
+    if rd.hours:
+        return f"{rd.hours}H"
+    if rd.minutes:
+        return f"{rd.minutes}T"
+    if rd.seconds:
+        return f"{rd.seconds}S"
+    raise ValueError("Unsupported relativedelta")

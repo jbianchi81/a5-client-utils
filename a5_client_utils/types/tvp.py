@@ -13,4 +13,4 @@ class TVP(TypedDict):
     """
     timestart : datetime
     valor : float
-    series_id : int = None
+    series_id : int
