@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, date as datetime_date
-from typing import Union, Optional, TypedDict
+from typing import Union, Optional, TypedDict, Literal, overload
 from dateutil.parser import isoparse
 from dateutil.relativedelta import relativedelta
 from dateutil import tz
 import pytz
+from pytz.exceptions import NonExistentTimeError
 import logging
 from pandas import DatetimeIndex, date_range, DateOffset
 
@@ -23,9 +24,25 @@ class IntervalDict(TypedDict):
     months: int
 
 
+@overload
 def tryParseAndLocalizeDate(
-        date_ : Union[str,float,datetime,tuple,datetime_date,IntervalDict],
-        timezone : str='America/Argentina/Buenos_Aires'
+        date_ : Union[str,float,datetime,tuple,datetime_date],
+        timezone : str='America/Argentina/Buenos_Aires',
+        *,
+        raise_if_nonexistent : Literal[True]
+    ) -> datetime: ...
+@overload
+def tryParseAndLocalizeDate(
+        date_ : Union[str,float,datetime,tuple,datetime_date],
+        timezone : str='America/Argentina/Buenos_Aires',
+        *,
+        raise_if_nonexistent : Literal[False] = False
+    ) -> Union[datetime, None]: ...
+def tryParseAndLocalizeDate(
+        date_ : Union[str,float,datetime,tuple,datetime_date],
+        timezone : str='America/Argentina/Buenos_Aires',
+        *,
+        raise_if_nonexistent : bool=False
     ) -> Union[datetime, None]:
     """
     Datetime parser. If duration is provided, computes date relative to now.
@@ -33,7 +50,7 @@ def tryParseAndLocalizeDate(
     Parameters:
     -----------
     date_string : str or float or datetime.datetime
-        For absolute date: ISO-8601 datetime string or datetime.datetime.
+        For absolute date: ISO-8601 datetime string or datetime.datetime or (year,month,date) tuple.
         For relative date: dict (duration key-values) or float (decimal number of days)
     
     timezone : str
@@ -49,10 +66,11 @@ def tryParseAndLocalizeDate(
     tryParseAndLocalizeDate("2024-01-01T03:00:00.000Z")
     tryParseAndLocalizeDate(1.5)
     tryParseAndLocalizeDate({"days":1, "hours": 12}, timezone = "Africa/Casablanca")
+    tryParseAndLocalizeDate((2000,1,1))
     ```
     """
-    date : datetime
-    if isinstance(date_,str):
+    
+    if isinstance(date_, str):
         date = isoparse(date_)
     elif isinstance(date_,dict):
         date = datetime.now() + relativedelta(**date_)
@@ -66,15 +84,19 @@ def tryParseAndLocalizeDate(
         date = datetime(date_.year, date_.month, date_.day)
     else:
         date = date_
-    
+        
     if date.tzinfo is None or date.tzinfo.utcoffset(date) is None:
         try:
-            date = pytz.timezone(timezone).localize(date)
-        except pytz.exceptions.NonExistentTimeError:
+            tz = pytz.timezone(timezone)
+            date = tz.localize(date)
+            # date = date.replace(tzinfo = pytz.timezone(timezone)) # ZoneInfo(timezone))
+        except NonExistentTimeError as e:
+            if raise_if_nonexistent:
+                raise e
             logging.warning("NonexistentTimeError: %s" % str(date))
             return None
     else:
-        date = date.astimezone(pytz.timezone(timezone))
+        date = date.astimezone(pytz.timezone(timezone)) # ZoneInfo(timezone))
     return date
 
 def createDatetimeSequence(

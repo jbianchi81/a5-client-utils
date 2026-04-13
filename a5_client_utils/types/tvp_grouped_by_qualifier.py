@@ -1,7 +1,7 @@
 from typing import TypedDict, List
-from .tvp import TVP
+from .tvp_prono import TVPProno
 
 
 class TVPGroupedByQualifier(TypedDict):
     qualifier : str
-    pronosticos : List[TVP]
+    pronosticos : List[TVPProno]

@@ -14,6 +14,7 @@ class CorridaDict(TypedDict):
     
     series: List[SeriesPronoDict]
     """
+    cal_id : int
     id : int
     forecast_date : datetime
     series: List[SeriesPronoDict]
